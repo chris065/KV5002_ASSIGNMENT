@@ -18,6 +18,9 @@ Author: Chris Bennett (w17004754)
 #include <unistd.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <semaphore.h>
+#include <assert.h>
+#include <pthread.h>
 
 const char *setCommand(char *command)
 {
@@ -50,35 +53,62 @@ void cleanup(void)
     close(fd);
 }
 
-
-int messageToDash(char *message[])
+size_t protocol(char *incoming, char *outgoing, size_t size)
 {
-	char *port = "65250";
-	struct addrinfo *address;
-	const struct addrinfo hints = {.ai_flags = AI_PASSIVE, .ai_family = AF_INET, .ai_socktype = SOCK_DGRAM,};
-	int err;
-
-	atexit(cleanup);
-	signal(SIGINT, finished);
-	
-	err = getaddrinfo(NULL, port, &hints, &address);
-	if(err)
+	int i;
+	for(i = 0; i<size && incoming[i]!='\0'; i++)
 	{
-		fprintf(stderr, "Error getting address: %s\n", gai_strerror(err));
-		exit(1);
+		outgoing[i] = toupper(incoming[i]);
 	}
-
-	fd = socket(AF_INET, SOCK_DGRAM, 0);
-	if(fd == -1)
-	{
-		fprintf(stderr, "Error making the socket: %s\n", strerror(errno));
-	}
+	outgoing[i] = '\0';
+	return strlen(outgoing);
 }
 
 
-int main(int argc, char *argv[])
+int messageToDash(char *message[])
 {
-	const char *command = setCommand(argv[1]);
+	char *host = "127.0.1.1";
+    	char *port = "65250";
+    	struct addrinfo *address;
+    	const struct addrinfo hints = {
+        	.ai_family = AF_INET,
+        	.ai_socktype = SOCK_DGRAM,
+    	};
+
+    	int fd, err;
+
+    	err = getaddrinfo(host, port, &hints, &address);
+    	if (err) 
+	{
+        	fprintf(stderr, "Error getting lander: %s\n", gai_strerror(err));
+        	exit(1);
+    	}
+    	fd = socket(AF_INET, SOCK_DGRAM, 0);
+    	if (fd == -1) 
+	{
+        	fprintf(stderr, "error making socket: %s\n", strerror(errno));
+        	exit(1);
+    	}
+
+    	/* Client message and  */
+    	const size_t buffsize = 4096;       /* 4k */
+    	char incoming[buffsize], outgoing[buffsize];
+    	size_t msgsize;
+    	struct sockaddr clientaddr;
+    	socklen_t addrlen = sizeof(clientaddr);
+
+    	sprintf(outgoing, message);
+    	/*Recieve message from server and parse into variables replace value for fuel and altitude 		with those*/    
+   	sendto(fd, outgoing, strlen(outgoing), 0, address->ai_addr, address->ai_addrlen);
+
+	return 0;
+	
+}
+
+char* requestDataFromServer(char *message[])
+{
+	const char *command = setCommand(message);
+	
 
 	//char *host = argv[1];
 	char *host = "127.0.1.1";
@@ -118,6 +148,98 @@ int main(int argc, char *argv[])
 	msgsize = recvfrom(fd, incoming, buffsize, 0, NULL, 0);
 	incoming[msgsize] = '\0';
 	printf("Reply: %s\n", incoming);
+
+	char *reply = incoming;
+	return reply;
+}
+
+
+
+char* getContactAndSendToDash(char *condition[])
+{
+	char *str = condition;
+	int init_size = strlen(str);
+	char * pch;
+
+	pch = strtok(str, ":=%\n");
+		
+	
+	while(pch != NULL)
+	{
+		//printf("%s\n", pch);
+		pch = strtok(NULL, ":=%\n");
+	}
+	
+	/*
+	for(int i = 0; i < init_size; i++)
+	{
+		printf("%s\n", &str[i]);
+	}
+	*/
+	
+	//char *statusString[] = {str[17], str[33], str[63]};
+	char *strStat[100];
+	strcpy(strStat, "fuel:");
+	strcat(strStat, &str[17]);
+	strcat(strStat, "\n");
+	strcat(strStat, "altitude:");
+	strcat(strStat, &str[33]);
+	strcat(strStat, "\n");
+	strcat(strStat, "contact:");
+	strcat(strStat, &str[63]);
+	strcat(strStat, "\n");
+	//puts(strStat);
+	
+
+	//printf("%s\n", strStat);
+	
+	messageToDash(&strStat);
+	return &strStat;
+}
+
+
+
+int main(int argc, char *argv[])
+{
+	pthread_t thread1;
+
+	const char *command = setCommand(argv[1]);
+	char* condition = requestDataFromServer("2");
+
+	//char *status = getContactStatus(condition);
+
+	
+
+	//constantly request the condition from the server every 5 seconds
+	//send data to the dashboard
+	
+	
+	while(true)
+	{
+		
+		if(pthread_create(&thread1, NULL, getContactAndSendToDash, condition))
+		{
+			fprintf(stderr, "failed to create the thread");
+			return 1;
+		}
+		
+
+		requestDataFromServer("2");
+
+		
+		if(pthread_join(thread1, NULL))
+		{
+			fprintf(stderr, "failed to join the thread");
+			return 2;
+		}
+		
+
+		sleep(1);
+	}
+	
+	
+	
+	return 0;
 }
 //mehtod to send message to the dash
 //take a paremeter that is the message
