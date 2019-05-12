@@ -1,7 +1,7 @@
 /*
 Controller Class (C)
-Version: 1.2
-Version Date: 08/04/2019
+Version: 1.3
+Version Date: 12/05/2019
 Author: Chris Bennett (w17004754)
 */
 
@@ -198,45 +198,126 @@ char* getContactAndSendToDash(char *condition[])
 }
 
 
+void controls()
+{
+    int state = 1;
+	const size_t buffsize = 4096;
+    char msg[buffsize];
+    while(state == 1){
+        switch(getchar()){
+        case 'w':
+            //code to set throttle 100
+            sprintf(msg,"command:!\nmain-engine:100\n");
+			sendCommand(msg);
+            break;
+        case 'a':
+            //code to set rcs-roll -1
+            sprintf(msg,"command:!\nrcs-roll:-1\n");
+			sendCommand(msg);
+            break;
+        case 's':
+            //code to set throttle 0
+            sprintf(msg,"command:!\nmain-engine:0\n");
+			sendCommand(msg);
+            break;
+        case 'd':
+            //code to set rcs-roll 1
+            sprintf(msg,"command:!\nrcs-roll:1\n");
+			sendCommand(msg);
+	 case 'c':
+            //code to set rcs-roll 0
+            sprintf(msg,"command:!\nrcs-roll:0\n");
+			sendCommand(msg);
+            break;
+		case 'q':
+			//code to quit
+			state = 0;
+			break;
+        }
+    }
+    //check for any keypress
+    //send message to lander server  
+}
+void sendCommand(char command[4096])
+{
+    char *host = "127.0.1.1";
+    char *port = "65200";
+    struct addrinfo *address;
+    const struct addrinfo hints = {
+        .ai_family = AF_INET,
+        .ai_socktype = SOCK_DGRAM,
+    };
 
-int main(int argc, char *argv[])
+    int fd, err;
+
+    err = getaddrinfo(host, port, &hints, &address);
+    if (err) {
+        fprintf(stderr, "Error getting lander: %s\n", gai_strerror(err));
+        exit(1);
+    }
+    fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd == -1) {
+        fprintf(stderr, "error making socket: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    /* Client message and  */
+    const size_t buffsize = 4096;       /* 4k */
+    char incoming[buffsize], outgoing[buffsize];
+    size_t msgsize;
+    struct sockaddr clientaddr;
+    socklen_t addrlen = sizeof(clientaddr);
+
+    strcpy(outgoing, command);    
+    sendto(fd, outgoing, strlen(outgoing), 0, address->ai_addr, address->ai_addrlen);
+}
+
+int sendDataToDashLoop()
 {
 	pthread_t thread1;
-
-	const char *command = setCommand(argv[1]);
 	char* condition = requestDataFromServer("2");
-
-	//char *status = getContactStatus(condition);
-
-	
-
-	//constantly request the condition from the server every 5 seconds
-	//send data to the dashboard
-	
 	
 	while(true)
 	{
 		
 		if(pthread_create(&thread1, NULL, getContactAndSendToDash, condition))
 		{
-			fprintf(stderr, "failed to create the thread");
+			fprintf(stderr, "failed to create the thread1");
 			return 1;
 		}
-		
 
 		requestDataFromServer("2");
 
 		
 		if(pthread_join(thread1, NULL))
 		{
-			fprintf(stderr, "failed to join the thread");
+			fprintf(stderr, "failed to join the thread1");
 			return 2;
 		}
-		
-
 		sleep(1);
 	}
+	return 0;
+}
+
+
+int main(int argc, char *argv[])
+{
+	pthread_t thread[3];
+	//const char *command = setCommand(argv[1]);
+	int rc;
+
+	//constantantly request and send data to the dash
+	rc = pthread_create(&thread[0], NULL, sendDataToDashLoop, NULL);
+	assert(rc == 0);
+	//get the controls of the player and send it to the server
+	rc = pthread_create(&thread[1], NULL, controls, NULL);
+	assert(rc == 0);
+	//Need a thread to send key presses to the file
 	
+	while(true)
+	{
+	}
+	exit(0);
 	
 	
 	return 0;
