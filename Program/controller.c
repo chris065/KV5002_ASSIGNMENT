@@ -302,6 +302,14 @@ int sendDataToDashLoop()
 
 int main(int argc, char *argv[])
 {
+
+	/*
+	LEFT TO DO ON SYSTEM
+	Send key presses to text file
+	Map Status and Terain to keys
+	Fix key bindings so you don't have to press enter everytime
+	*/
+
 	pthread_t thread[3];
 	//const char *command = setCommand(argv[1]);
 	int rc;
